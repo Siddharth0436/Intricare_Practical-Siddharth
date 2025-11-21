@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class CustomField extends Model
 {
-protected $fillable = ['label','name','type','meta','required'];
+protected $fillable = ['label','name','type','meta','is_required','sort_order'];
 
 
 protected $casts = [

@@ -6,7 +6,36 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <link rel="stylesheet" href="/resources/css/style.css">
+    <style>
+        .modal-backdrop {
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: 1040;
+            width: 100vw;
+            height: 100vh;
+            background-color: #000;
+        }
+        .modal-backdrop.fade { opacity: 0; }
+        .modal-backdrop.show { opacity: 0.5; }
+        body.modal-open {
+            overflow: hidden;
+            padding-right: 0 !important;
+        }
+        .contact-image {
+            width: 50px;
+            height: 50px;
+            object-fit: cover;
+        }
+        .drag-handle {
+            cursor: move;
+            opacity: 0.6;
+        }
+        .dragging {
+            opacity: 0.5;
+            background-color: #f8f9fa;
+        }
+    </style>
 </head>
 
 <body class="bg-light p-4">
@@ -145,18 +174,46 @@
                 </div>
                 <div class="modal-body">
                     <h5>Add New Field</h5>
-                    <form id="newCustomFieldForm" class="row g-2 align-items-end mb-4">
-                        <div class="col">
+                    <form id="newCustomFieldForm" class="row g-3 mb-4">
+                        <div class="col-12">
                             <label class="form-label">Field Label</label>
-                            <input type="text" name="label" class="form-control" required>
+                            <input type="text" name="label" class="form-control" required
+                                placeholder="Enter field display name">
                         </div>
-                        <div class="col-auto">
-                            <button type="submit" class="btn btn-success">Add</button>
+                        <div class="col-md-6">
+                            <label class="form-label">Field Type</label>
+                            <select name="type" class="form-select" required>
+                                <option value="">Select Type</option>
+                                <option value="text">Text</option>
+                                <option value="email">Email</option>
+                                <option value="phone">Phone</option>
+                                <option value="number">Number</option>
+                                <option value="date">Date</option>
+                                <option value="textarea">Text Area</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Display Order</label>
+                            <input type="number" name="sort_order" class="form-control"
+                                value="0" min="0" placeholder="Order">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Requirement</label>
+                            <select name="is_required" class="form-select">
+                                <option value="0">Optional</option>
+                                <option value="1">Required</option>
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <button type="submit" class="btn btn-success w-100">Add Field</button>
                         </div>
                     </form>
 
                     <h5>Existing Fields</h5>
-                    <ul class="list-group" id="existingFieldsList"></ul>
+                    <div class="mb-2">
+                        <small class="text-muted">Drag to reorder fields</small>
+                    </div>
+                    <ul class="list-group sortable-fields" id="existingFieldsList"></ul>
                 </div>
                 <div class="modal-footer">
                     <button class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
@@ -233,7 +290,7 @@
 
         function showErrors(errorData) {
             clearErrors();
-            
+
             $.each(errorData, function(fieldName, messages) {
                 var inputField = $('[name="' + fieldName + '"]');
                 if (!inputField.length && fieldName.startsWith("custom_fields.")) {
@@ -266,7 +323,7 @@
         function setupModals() {
             mergeModal = new bootstrap.Modal(document.getElementById('mergeModal'));
             successModal = new bootstrap.Modal(document.getElementById('mergeSuccessModal'));
-            
+
             $('#contactModal').on('show.bs.modal', function(e) {
                 var trigger = e.relatedTarget;
                 if (trigger && trigger.id === 'addContactBtn') {
@@ -298,9 +355,9 @@
         // Contact functions
         function fetchContacts(url) {
             if (!url) url = "{{ url('/contacts') }}";
-            
+
             toggleSpinner(true);
-            
+
             var searchData = {
                 name: $('#filterName').val(),
                 email: $('#filterEmail').val(),
@@ -326,30 +383,35 @@
 
         function fillContactsTable(contacts) {
             var html = '';
-            
+
             if (contacts.length === 0) {
                 html = '<tr><td colspan="' + (6 + fieldList.length) + '" class="text-center">No contacts found</td></tr>';
             } else {
+                // Use sorted field order for consistent columns
+                var sortedFields = [...fieldList].sort(function(a, b) {
+                    return (a.sort_order || 0) - (b.sort_order || 0);
+                });
+                
                 contacts.forEach(function(contact) {
                     var imgSrc = contact.profile_image ? storageBaseUrl + contact.profile_image : 'https://via.placeholder.com/50';
-                    
+
                     var customCells = '';
-                    fieldList.forEach(function(field) {
+                    sortedFields.forEach(function(field) {
                         var customVal = (contact.custom_values || []).find(function(v) {
                             return v.custom_field_id == field.id;
                         });
                         customCells += '<td>' + (customVal ? customVal.value : '') + '</td>';
                     });
 
-                    var statusHtml = contact.is_active === false ? 
-                        '<span class="badge bg-secondary">Merged</span>' : 
+                    var statusHtml = contact.is_active === false ?
+                        '<span class="badge bg-secondary">Merged</span>' :
                         '<span class="badge bg-success">Active</span>';
 
                     var actionButtons = '';
                     if (contact.is_active) {
                         actionButtons = '<button class="btn btn-sm btn-info mergeBtn" data-id="' + contact.id + '">Merge</button> ' +
-                                      '<button class="btn btn-warning btn-sm editBtn" data-id="' + contact.id + '">Edit</button> ' +
-                                      '<button class="btn btn-sm btn-danger deleteBtn" data-id="' + contact.id + '">Delete</button>';
+                            '<button class="btn btn-warning btn-sm editBtn" data-id="' + contact.id + '">Edit</button> ' +
+                            '<button class="btn btn-sm btn-danger deleteBtn" data-id="' + contact.id + '">Delete</button>';
                     } else {
                         actionButtons = '<span class="text-muted">Merged</span>';
                     }
@@ -362,10 +424,10 @@
                         customCells +
                         '<td>' + statusHtml + '</td>' +
                         '<td>' + actionButtons + '</td>' +
-                    '</tr>';
+                        '</tr>';
                 });
             }
-            
+
             $('#contactsTable').html(html);
         }
 
@@ -377,7 +439,7 @@
             if (!confirm('Delete this contact?')) return;
 
             toggleSpinner(true);
-            
+
             $.ajax({
                 url: '/contacts/' + contactId,
                 method: 'POST',
@@ -400,7 +462,7 @@
 
         function loadContactForEdit(contactId) {
             toggleSpinner(true);
-            
+
             $.ajax({
                 url: '/contacts/' + contactId,
                 method: "GET",
@@ -443,14 +505,14 @@
             var contactId = $('#contact_id').val();
             var formUrl = contactId ? '/contacts/' + contactId : '{{ route("contacts.store") }}';
             var formData = new FormData(document.getElementById('contactForm'));
-            
+
             if (contactId) {
                 formData.append('_method', 'PUT');
             }
 
             toggleSpinner(true);
             clearErrors();
-            
+
             $.ajax({
                 url: formUrl,
                 method: "POST",
@@ -486,7 +548,7 @@
 
         function loadFieldsList() {
             toggleSpinner(true);
-            
+
             $.ajax({
                 url: '/custom-fields',
                 method: 'GET',
@@ -505,36 +567,74 @@
 
         function displayFields(fields) {
             var html = '';
-            
+
             if (fields.length === 0) {
                 html = '<li class="list-group-item">No custom fields yet.</li>';
             } else {
-                fields.forEach(function(field) {
-                    html += '<li class="list-group-item d-flex justify-content-between align-items-center" data-field-id="' + field.id + '">' +
+                // Sort fields by order before displaying
+                fields.sort(function(a, b) {
+                    return (a.sort_order || 0) - (b.sort_order || 0);
+                }).forEach(function(field) {
+                    var requirementBadge = field.is_required ?
+                        '<span class="badge bg-danger ms-2">Required</span>' :
+                        '<span class="badge bg-secondary ms-2">Optional</span>';
+
+                    var typeBadge = '<span class="badge bg-info ms-2">' + (field.type || 'text') + '</span>';
+                    var orderBadge = '<span class="badge bg-light text-dark ms-2">#' + (field.sort_order || 0) + '</span>';
+
+                    html += '<li class="list-group-item d-flex justify-content-between align-items-center" ' +
+                        'data-field-id="' + field.id + '" draggable="true">' +
+                        '<div class="d-flex align-items-center">' +
+                        '<span class="drag-handle me-2">↕</span>' +
+                        '<div>' +
                         field.label +
+                        typeBadge +
+                        requirementBadge +
+                        orderBadge +
+                        '</div>' +
+                        '</div>' +
                         '<button class="btn btn-danger btn-sm delete-field-btn" data-id="' + field.id + '">Delete</button>' +
-                    '</li>';
+                        '</li>';
                 });
             }
-            
+
             $('#existingFieldsList').html(html);
         }
 
         function createNewField() {
+            var fieldLabel = $('#newCustomFieldForm [name="label"]').val();
+            var fieldType = $('#newCustomFieldForm [name="type"]').val();
+            var isRequired = $('#newCustomFieldForm [name="is_required"]').val();
+            var sortOrder = parseInt($('#newCustomFieldForm [name="sort_order"]').val()) || 0;
+
+            if (!fieldLabel || !fieldType) {
+                showAlert('error', 'Please fill all required fields');
+                return;
+            }
+
             toggleSpinner(true);
-            
+
             $.ajax({
                 url: '/custom-fields',
                 method: 'POST',
                 data: {
-                    label: $('#newCustomFieldForm [name="label"]').val(),
-                    type: 'text',
+                    label: fieldLabel,
+                    type: fieldType,
+                    is_required: isRequired,
+                    sort_order: sortOrder,
                     _token: '{{ csrf_token() }}'
                 },
                 success: function(newField) {
-                    showAlert('success', 'Field added!');
+                    showAlert('success', 'Field added successfully!');
                     fieldList.push(newField);
-                    addFieldToPage(newField);
+                    
+                    // Refresh everything
+                    refreshContactFormFields();
+                    updateTableHeaders();
+                    fetchContacts();
+                    
+                    // Close modal and reset form
+                    bootstrap.Modal.getInstance(document.getElementById('customFieldsModal')).hide();
                     $('#newCustomFieldForm')[0].reset();
                     toggleSpinner(false);
                 },
@@ -545,22 +645,47 @@
             });
         }
 
-        function addFieldToPage(field) {
-            if ($('#existingFieldsList').find('.list-group-item-info').length) {
-                $('#existingFieldsList').html('');
+        function addFieldToForm(field) {
+            var fieldInput = '';
+            switch (field.type) {
+                case 'textarea':
+                    fieldInput = '<textarea class="form-control custom-field" ' +
+                        'name="custom_fields[' + field.id + ']" ' +
+                        'data-id="' + field.id + '" ' +
+                        'rows="3"' +
+                        (field.is_required ? ' required' : '') + '></textarea>';
+                    break;
+                case 'email':
+                    fieldInput = '<input type="email" class="form-control custom-field" ' +
+                        'name="custom_fields[' + field.id + ']" ' +
+                        'data-id="' + field.id + '" ' +
+                        (field.is_required ? ' required' : '') + '>';
+                    break;
+                case 'number':
+                    fieldInput = '<input type="number" class="form-control custom-field" ' +
+                        'name="custom_fields[' + field.id + ']" ' +
+                        'data-id="' + field.id + '" ' +
+                        (field.is_required ? ' required' : '') + '>';
+                    break;
+                case 'date':
+                    fieldInput = '<input type="date" class="form-control custom-field" ' +
+                        'name="custom_fields[' + field.id + ']" ' +
+                        'data-id="' + field.id + '" ' +
+                        (field.is_required ? ' required' : '') + '>';
+                    break;
+                default: // text, phone
+                    fieldInput = '<input type="text" class="form-control custom-field" ' +
+                        'name="custom_fields[' + field.id + ']" ' +
+                        'data-id="' + field.id + '" ' +
+                        (field.is_required ? ' required' : '') + '>';
             }
-            
-            $('#existingFieldsList').append(
-                '<li class="list-group-item d-flex justify-content-between align-items-center" data-field-id="' + field.id + '">' +
-                    field.label +
-                    '<button class="btn btn-danger btn-sm delete-field-btn" data-id="' + field.id + '">Delete</button>' +
-                '</li>'
-            );
 
             $('#customFieldsArea').append(
                 '<div class="col-md-6" data-field-id="' + field.id + '">' +
-                    '<label class="form-label">' + field.label + '</label>' +
-                    '<input type="text" class="form-control custom-field" name="custom_fields[' + field.id + ']" data-id="' + field.id + '">' +
+                '<label class="form-label">' + field.label +
+                (field.is_required ? '<span class="text-danger"> *</span>' : '') +
+                '</label>' +
+                fieldInput +
                 '</div>'
             );
         }
@@ -569,7 +694,7 @@
             if (!confirm('Are you sure? This will remove all data for this field.')) return;
 
             toggleSpinner(true);
-            
+
             $.ajax({
                 url: '/custom-fields/' + fieldId,
                 method: 'DELETE',
@@ -594,6 +719,129 @@
             });
         }
 
+        // Function to refresh contact form fields in correct order
+        function refreshContactFormFields() {
+            // Clear existing custom fields
+            $('#customFieldsArea').html('');
+
+            // Add fields in sorted order
+            fieldList.sort(function(a, b) {
+                return (a.sort_order || 0) - (b.sort_order || 0);
+            }).forEach(function(field) {
+                addFieldToForm(field);
+            });
+        }
+
+        function updateTableHeaders() {
+            var headerRow = $('#contactsTable').closest('table').find('thead tr');
+            var tbody = $('#contactsTable');
+            
+            // Remove existing custom field headers and data cells
+            headerRow.find('th:gt(3):not(:last):not(:nth-last-child(2))').remove();
+            tbody.find('tr').each(function() {
+                $(this).find('td:gt(3):not(:last):not(:nth-last-child(2))').remove();
+            });
+            
+            // Add new custom field headers in correct order
+            var sortedFields = [...fieldList].sort(function(a, b) {
+                return (a.sort_order || 0) - (b.sort_order || 0);
+            });
+
+            sortedFields.forEach(function(field) {
+                $('<th></th>').text(field.label).insertBefore(headerRow.find('th:nth-last-child(2)'));
+            });
+        }
+
+        // Drag and drop functionality
+        function initSortableFields() {
+            $('#existingFieldsList').on('dragstart', '.list-group-item', function(e) {
+                e.originalEvent.dataTransfer.setData('text/plain', $(this).data('field-id'));
+                $(this).addClass('dragging');
+            });
+
+            $('#existingFieldsList').on('dragend', '.list-group-item', function() {
+                $(this).removeClass('dragging');
+            });
+
+            $('#existingFieldsList').on('dragover', function(e) {
+                e.preventDefault();
+                var afterElement = getDragAfterElement(this, e.originalEvent.clientY);
+                var draggable = $('.dragging')[0];
+                if (afterElement == null) {
+                    this.appendChild(draggable);
+                } else {
+                    this.insertBefore(draggable, afterElement);
+                }
+            });
+
+            $('#existingFieldsList').on('drop', function(e) {
+                e.preventDefault();
+                updateFieldOrder();
+            });
+        }
+
+        function getDragAfterElement(container, y) {
+            var draggableElements = [...container.querySelectorAll('.list-group-item:not(.dragging)')];
+
+            return draggableElements.reduce((closest, child) => {
+                var box = child.getBoundingClientRect();
+                var offset = y - box.top - box.height / 2;
+                if (offset < 0 && offset > closest.offset) {
+                    return { offset: offset, element: child };
+                } else {
+                    return closest;
+                }
+            }, { offset: Number.NEGATIVE_INFINITY }).element;
+        }
+
+        function updateFieldOrder() {
+            var newOrder = [];
+            $('#existingFieldsList .list-group-item').each(function(index) {
+                var fieldId = $(this).data('field-id');
+                newOrder.push({
+                    id: fieldId,
+                    sort_order: index
+                });
+            });
+
+            toggleSpinner(true);
+
+            $.ajax({
+                url: '/custom-fields/update-order',
+                method: 'POST',
+                data: {
+                    order: newOrder,
+                    _token: '{{ csrf_token() }}'
+                },
+                success: function(response) {
+                    // Update fieldList with new order from server
+                    if (response.fields) {
+                        fieldList = response.fields;
+                    } else {
+                        // Fallback: update local fieldList order
+                        newOrder.forEach(function(item) {
+                            var field = fieldList.find(function(f) { return f.id == item.id; });
+                            if (field) field.sort_order = item.sort_order;
+                        });
+                        fieldList.sort(function(a, b) { return (a.sort_order || 0) - (b.sort_order || 0); });
+                    }
+                    
+                    // Refresh everything
+                    refreshContactFormFields();
+                    updateTableHeaders();
+                    fetchContacts();
+                    
+                    showAlert('success', 'Field order updated successfully!');
+                    toggleSpinner(false);
+                },
+                error: function(xhr) {
+                    showAlert('error', 'Failed to update field order');
+                    toggleSpinner(false);
+                    loadFieldsList(); // Reset to server order
+                }
+            });
+        }
+
         // Merge functions
         function startMerge(secondaryId) {
             mergeContactId = secondaryId;
@@ -612,7 +860,7 @@
 
         function showMergeContacts(contacts) {
             var html = '<div class="list-group">';
-            
+
             if (contacts.length === 0) {
                 html += '<div class="alert alert-warning">No other active contacts available for merging.</div>';
             } else {
@@ -620,10 +868,10 @@
                     html += '<label class="list-group-item">' +
                         '<input type="radio" name="master_id" value="' + contact.id + '" required />' +
                         '<strong>' + contact.name + '</strong> ' + (contact.email ? '(' + contact.email + ')' : '') +
-                    '</label>';
+                        '</label>';
                 });
             }
-            
+
             html += '</div>';
             $('#mergeCandidates').html(html);
         }
@@ -655,7 +903,7 @@
                         '<strong>' + field.field_label + '</strong><br>' +
                         'Master: ' + (field.master_value || 'Empty') + ' + Secondary: ' + field.secondary_value + '<br>' +
                         '<small>→ Will become: ' + field.new_value + '</small>' +
-                    '</li>';
+                        '</li>';
                 });
                 html += '</ul>';
             }
@@ -667,13 +915,13 @@
                         html += '<li class="list-group-item list-group-item-success">' +
                             '<strong>New Email:</strong> ' + email.email + '<br>' +
                             '<small>Action: Will be added as new email</small>' +
-                        '</li>';
+                            '</li>';
                     } else if (email.action === 'concatenate') {
                         html += '<li class="list-group-item list-group-item-warning">' +
                             '<strong>Email Concatenation:</strong><br>' +
                             'Existing: ' + email.existing_email + ' + New: ' + email.email + '<br>' +
                             '<small>→ Will become: ' + email.new_value + '</small>' +
-                        '</li>';
+                            '</li>';
                     }
                 });
                 html += '</ul>';
@@ -686,13 +934,13 @@
                         html += '<li class="list-group-item list-group-item-success">' +
                             '<strong>New Phone:</strong> ' + phone.phone + '<br>' +
                             '<small>Action: Will be added as new phone</small>' +
-                        '</li>';
+                            '</li>';
                     } else if (phone.action === 'concatenate') {
                         html += '<li class="list-group-item list-group-item-warning">' +
                             '<strong>Phone Concatenation:</strong><br>' +
                             'Existing: ' + phone.existing_phone + ' + New: ' + phone.phone + '<br>' +
                             '<small>→ Will become: ' + phone.new_value + '</small>' +
-                        '</li>';
+                            '</li>';
                     }
                 });
                 html += '</ul>';
@@ -702,28 +950,28 @@
                 html += '<h6>Custom Field Changes:</h6><ul class="list-group">';
                 preview.custom_fields.forEach(function(field) {
                     var bgClass = field.action === 'copy_to_master' ? 'list-group-item-success' :
-                                field.action === 'concatenate' ? 'list-group-item-warning' : 'list-group-item-info';
+                        field.action === 'concatenate' ? 'list-group-item-warning' : 'list-group-item-info';
 
                     if (field.action === 'copy_to_master') {
                         html += '<li class="list-group-item ' + bgClass + '">' +
                             '<strong>' + field.field_label + '</strong><br>' +
                             'Master: Empty → Secondary: ' + field.secondary_value + '<br>' +
                             '<small>Action: Will be copied to master</small>' +
-                        '</li>';
+                            '</li>';
                     } else if (field.action === 'concatenate') {
                         html += '<li class="list-group-item ' + bgClass + '">' +
                             '<strong>' + field.field_label + '</strong><br>' +
                             'Master: ' + field.master_value + ' + Secondary: ' + field.secondary_value + '<br>' +
                             '<small>→ Will become: ' + field.new_value + '</small>' +
-                        '</li>';
+                            '</li>';
                     }
                 });
                 html += '</ul>';
             }
 
-            if ((!preview.main_fields || preview.main_fields.length === 0) && 
-                (!preview.emails || preview.emails.length === 0) && 
-                (!preview.phones || preview.phones.length === 0) && 
+            if ((!preview.main_fields || preview.main_fields.length === 0) &&
+                (!preview.emails || preview.emails.length === 0) &&
+                (!preview.phones || preview.phones.length === 0) &&
                 (!preview.custom_fields || preview.custom_fields.length === 0)) {
                 html += '<div class="alert alert-info">No new data to merge. Contacts are identical.</div>';
             }
@@ -774,7 +1022,7 @@
                         '<td>' + (item.secondary_value || '-') + '</td>' +
                         '<td>' + (item.final_value || '-') + '</td>' +
                         '<td>' + item.action + '</td>' +
-                    '</tr>';
+                        '</tr>';
                 });
             }
 
@@ -782,18 +1030,18 @@
                 '<p class="mb-2"><strong>Contacts merged successfully!</strong></p>' +
                 '<p>Master: <strong>' + response.master_name + '</strong> | Secondary: <strong>' + response.secondary_name + '</strong></p>' +
                 '<div class="table-responsive">' +
-                    '<table class="table table-bordered table-striped">' +
-                        '<thead>' +
-                            '<tr>' +
-                                '<th>Field</th>' +
-                                '<th>Master Value</th>' +
-                                '<th>Secondary Value</th>' +
-                                '<th>Final Value</th>' +
-                                '<th>Action Taken</th>' +
-                            '</tr>' +
-                        '</thead>' +
-                        '<tbody>' + rows + '</tbody>' +
-                    '</table>' +
+                '<table class="table table-bordered table-striped">' +
+                '<thead>' +
+                '<tr>' +
+                '<th>Field</th>' +
+                '<th>Master Value</th>' +
+                '<th>Secondary Value</th>' +
+                '<th>Final Value</th>' +
+                '<th>Action Taken</th>' +
+                '</tr>' +
+                '</thead>' +
+                '<tbody>' + rows + '</tbody>' +
+                '</table>' +
                 '</div>'
             );
 
@@ -808,6 +1056,7 @@
         $(document).ready(function() {
             setupModals();
             fetchContacts();
+            initSortableFields();
 
             $('#profile_image').change(function() {
                 var file = this.files[0];
@@ -843,12 +1092,12 @@
             $(document).on('click', '#manageFieldsBtn', function() {
                 openFieldManager();
             });
-            
+
             $(document).on('submit', '#newCustomFieldForm', function(e) {
                 e.preventDefault();
                 createNewField();
             });
-            
+
             $(document).on('click', '.delete-field-btn', function() {
                 deleteField($(this).data('id'));
             });
@@ -856,11 +1105,11 @@
             $(document).on('click', '.mergeBtn', function() {
                 startMerge($(this).data('id'));
             });
-            
+
             $(document).on('click', '#btnPreviewMerge', function() {
                 showMergePreview();
             });
-            
+
             $(document).on('click', '#btnConfirmMerge', function() {
                 doMerge();
             });

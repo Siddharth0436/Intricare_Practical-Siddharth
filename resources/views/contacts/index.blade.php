@@ -579,7 +579,9 @@
                         '<span class="badge bg-danger ms-2">Required</span>' :
                         '<span class="badge bg-secondary ms-2">Optional</span>';
 
-                    var typeBadge = '<span class="badge bg-info ms-2">' + (field.type || 'text') + '</span>';
+                    // Show the original UI input type if provided in meta, otherwise stored type
+                    var displayType = (field.meta && field.meta.input_type) ? field.meta.input_type : field.type;
+                    var typeBadge = '<span class="badge bg-info ms-2">' + (displayType || 'text') + '</span>';
                     var orderBadge = '<span class="badge bg-light text-dark ms-2">#' + (field.sort_order || 0) + '</span>';
 
                     html += '<li class="list-group-item d-flex justify-content-between align-items-center" ' +
@@ -647,7 +649,10 @@
 
         function addFieldToForm(field) {
             var fieldInput = '';
-            switch (field.type) {
+            // Prefer the original UI type saved in meta; fallback to canonical stored type
+            var uiType = (field.meta && field.meta.input_type) ? field.meta.input_type : field.type;
+
+            switch (uiType) {
                 case 'textarea':
                     fieldInput = '<textarea class="form-control custom-field" ' +
                         'name="custom_fields[' + field.id + ']" ' +
